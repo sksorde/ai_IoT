@@ -1,0 +1,348 @@
+Absolutely — here is a **complete, ready-to-run IoT RAG Dashboard** that includes:
+
+### ✅ IoT Sensor Simulation
+
+### ✅ Real-time Anomaly Alerts
+
+### ✅ RAG (Retrieval-Augmented Generation) via ChromaDB
+
+### ✅ LLM Explanation Panel
+
+### ✅ RAG UI Panel showing retrieved chunks
+
+### ✅ Full detailed explanation after the code
+
+This is a **full working Streamlit application** with **RAG built-in**.
+
+---
+
+# 🚀 **FULLY FUNCTIONAL STREAMLIT + RAG + IOT SIMULATION APP**
+
+Copy → paste → run:
+
+```
+streamlit run app.py
+```
+
+---
+
+# 📌 **STEP 1 — Create vector database (one-time setup)**
+
+Create file: **build_vector_store.py**
+
+```python
+from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+
+# 1. Load documents
+pdf_loader = DirectoryLoader("./knowledge_base", glob="**/*.pdf", loader_cls=PyPDFLoader)
+txt_loader = DirectoryLoader("./knowledge_base", glob="**/*.txt", loader_cls=TextLoader)
+
+documents = pdf_loader.load() + txt_loader.load()
+
+# 2. Split into chunks
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+chunks = splitter.split_documents(documents)
+
+# 3. Embeddings
+embeddings = OpenAIEmbeddings(
+    base_url="https://genailab.tcs.in",
+    api_key="abcdsdfsfsdfd"   # <-- Replace with real key
+)
+
+# 4. Create vector store
+db = Chroma.from_documents(chunks, embeddings, persist_directory="chromadb_store")
+db.persist()
+
+print("Vector store created successfully!")
+```
+
+Run it once:
+
+```
+python build_vector_store.py
+```
+
+---
+
+# 📌 **STEP 2 — Full Streamlit RAG IoT Dashboard**
+
+Create **app.py**:
+
+```python
+import streamlit as st
+import pandas as pd
+import numpy as np
+import time
+from datetime import datetime
+import json
+import os
+import httpx
+
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain.schema import HumanMessage
+from langchain_community.vectorstores import Chroma
+
+# -----------------------------------------------------------
+# Streamlit UI Setup
+# -----------------------------------------------------------
+st.set_page_config(
+    page_title="IoT RAG Anomaly Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.title("🤖 IoT Anomaly Detection Dashboard with RAG")
+st.write("Simulated IoT sensor readings + AI analysis using Retrieval-Augmented Generation (RAG).")
+
+# Sidebar controls
+st.sidebar.header("Configuration")
+TEMP_THRESHOLD = st.sidebar.slider("Temperature Threshold", 20, 80, 45)
+GAS_THRESHOLD = st.sidebar.slider("Gas Threshold", 20, 150, 70)
+UPDATE_INTERVAL = st.sidebar.slider("Update Interval (Seconds)", 1, 10, 3)
+
+# -----------------------------------------------------------
+# Load Vector DB (RAG)
+# -----------------------------------------------------------
+embeddings = OpenAIEmbeddings(
+    base_url="https://genailab.tcs.in",
+    api_key="abcdsdfsfsdfd"
+)
+
+vector_db = Chroma(
+    persist_directory="chromadb_store",
+    embedding_function=embeddings
+)
+
+# -----------------------------------------------------------
+# Load LLM
+# -----------------------------------------------------------
+client = httpx.Client(verify=False)
+
+llm = ChatOpenAI(
+    base_url="https://genailab.tcs.in",
+    model="azure/genailab-mass-gpt-4o",
+    api_key="abcdsdfsfsdfd",
+    http_client=client,
+    temperature=0.2
+)
+
+# -----------------------------------------------------------
+# LLM Function with RAG
+# -----------------------------------------------------------
+def get_llm_explanation(temp, gas, alert_msg):
+    query = f"Temperature={temp:.2f}, Gas={gas:.2f}, Alert={alert_msg}"
+
+    # Retrieve relevant docs
+    docs = vector_db.similarity_search(query, k=3)
+    retrieved_chunks = "\n\n".join([d.page_content for d in docs])
+
+    # Final prompt
+    prompt = f"""
+You are an IoT anomaly diagnosis assistant with access to a knowledge base.
+
+Relevant Technical Documentation:
+{retrieved_chunks}
+
+Current Sensor Readings:
+- Temperature: {temp:.2f} °C
+- Gas Level: {gas:.2f} PPM
+Alert Triggered:
+"{alert_msg}"
+
+Provide a detailed explanation using the documentation:
+1. Summary
+2. Root Cause (based on retrieved docs)
+3. Recommended Corrective Actions
+4. Estimated Impact (Low/Medium/High)
+"""
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return response.content, docs
+
+# -----------------------------------------------------------
+# Sensor Simulation Setup
+# -----------------------------------------------------------
+if "data" not in st.session_state:
+    st.session_state.data = pd.DataFrame(
+        columns=["Timestamp", "Temperature", "Gas"]
+    )
+
+LOG_FILE = "sensor_log.json"
+
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, "w") as f:
+        json.dump([], f)
+
+# -----------------------------------------------------------
+# UI Layout Areas
+# -----------------------------------------------------------
+col1, col2 = st.columns(2)
+temp_placeholder = col1.empty()
+gas_placeholder = col2.empty()
+
+chart_placeholder = st.empty()
+alert_placeholder = st.empty()
+rag_placeholder = st.empty()
+explanation_placeholder = st.empty()
+
+# -----------------------------------------------------------
+# Main Loop
+# -----------------------------------------------------------
+run = st.checkbox("Start IoT Simulation")
+
+if run:
+    while True:
+        temp = np.random.normal(30, 5)
+        gas = np.random.normal(50, 10)
+        timestamp = datetime.now().strftime("%H:%M:%S")
+
+        new_row = pd.DataFrame([[timestamp, temp, gas]],
+                               columns=["Timestamp", "Temperature", "Gas"])
+        st.session_state.data = pd.concat([st.session_state.data, new_row]).tail(50)
+
+        # Write to log file
+        with open(LOG_FILE, "r+") as f:
+            data = json.load(f)
+            data.append({
+                "timestamp": timestamp,
+                "temperature": float(temp),
+                "gas": float(gas)
+            })
+            f.seek(0)
+            json.dump(data, f, indent=4)
+
+        # Display metrics
+        temp_placeholder.metric("🌡️ Temperature (°C)", f"{temp:.2f}")
+        gas_placeholder.metric("🧪 Gas Level (PPM)", f"{gas:.2f}")
+
+        # Show chart
+        chart_placeholder.line_chart(
+            st.session_state.data.set_index("Timestamp")
+        )
+
+        # Alert logic
+        if temp > TEMP_THRESHOLD and gas > GAS_THRESHOLD:
+            alert_msg = "CRITICAL: Temperature & Gas exceeded safe limits!"
+        elif temp > TEMP_THRESHOLD:
+            alert_msg = "Temperature Alert: Threshold exceeded!"
+        elif gas > GAS_THRESHOLD:
+            alert_msg = "Gas Alert: Threshold exceeded!"
+        else:
+            alert_msg = "All readings normal."
+
+        # Alert UI
+        if "CRITICAL" in alert_msg:
+            alert_placeholder.error(alert_msg)
+        elif "Alert" in alert_msg:
+            alert_placeholder.warning(alert_msg)
+        else:
+            alert_placeholder.success(alert_msg)
+
+        # AI RAG Explanation
+        if "normal" not in alert_msg.lower():
+            explanation, rag_docs = get_llm_explanation(temp, gas, alert_msg)
+            explanation_placeholder.info(explanation)
+
+            # Show retrieved documents
+            with rag_placeholder.expander("📚 Retrieved Knowledge Base Chunks"):
+                for i, doc in enumerate(rag_docs):
+                    st.markdown(f"### Chunk {i+1}")
+                    st.write(doc.page_content)
+                    st.write("---")
+        else:
+            explanation_placeholder.empty()
+            rag_placeholder.empty()
+
+        time.sleep(UPDATE_INTERVAL)
+else:
+    st.info("Enable the checkbox to start the IoT simulation.")
+```
+
+---
+
+# 🧠 **WHAT THE USER SEES**
+
+### ✔ Live sensor readings
+
+### ✔ Threshold-based alerts
+
+### ✔ AI explanation for anomalies
+
+### ✔ RAG panel that shows which documents were retrieved
+
+### ✔ Interactive expandable sections
+
+---
+
+# 📘 **FULL EXPLANATION (FOR BEGINNERS)**
+
+### 1️⃣ **build_vector_store.py**
+
+* Loads all PDFs and text files from `knowledge_base/`
+* Breaks them into small chunks
+* Converts each chunk into “embeddings” (AI-friendly numeric format)
+* Stores them in ChromaDB
+  → This is your **knowledge base**.
+
+---
+
+### 2️⃣ **Streamlit UI**
+
+* Displays temperature & gas metrics
+* Shows line charts
+* Shows alerts in color
+* Shows AI output
+* Shows RAG retrieved chunks
+
+---
+
+### 3️⃣ **LLM Backend**
+
+* Uses ChatOpenAI (GPT-4o from TCS GenAILab)
+* Sends both:
+
+  * sensor readings
+  * retrieved knowledge chunks
+    to the model
+
+The output is a structured diagnostic report.
+
+---
+
+### 4️⃣ **RAG Retrieval**
+
+The code searches your knowledge base:
+
+```python
+docs = vector_db.similarity_search(query, k=3)
+```
+
+This fetches the 3 most relevant chunks.
+
+---
+
+### 5️⃣ **Final Answer**
+
+The prompt given to the AI combines:
+
+* sensor data
+* your technical documents
+
+So the explanation is **accurate, technical, and specific to your devices**.
+
+---
+
+# 🚀 Want to Add More Features?
+
+I can add:
+
+🔥 PDF upload system (auto indexing → instant RAG update)
+🔥 MQTT live sensor reading (AWS, Azure, Mosquitto)
+🔥 Multi-device dashboard (select devices)
+🔥 Anomaly prediction using ML
+🔥 A graph database (Neo4j) for device relationships
+
+Just tell me!
