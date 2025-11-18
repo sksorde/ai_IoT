@@ -1,0 +1,355 @@
+Below is a **beginner-friendly, step-by-step explanation** of the entire Streamlit + LLM IoT dashboard.
+I explain the code as if you’re new to programming, IoT, and AI.
+
+---
+
+# ⭐ **Full Code Explanation (Very Easy to Understand)**
+
+This application **simulates IoT sensor readings** (temperature & gas levels), displays them in a live dashboard, checks for anomalies, and if something looks dangerous, it uses an **LLM (AI model like GPT)** to explain the problem in plain English.
+
+---
+
+# 🧱 **1. Importing Required Libraries**
+
+```python
+import streamlit as st
+import pandas as pd
+import numpy as np
+import time
+from datetime import datetime
+import json
+import os
+import httpx
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage
+```
+
+These libraries help with:
+
+* **streamlit** → create a web dashboard
+* **pandas** → store the sensor data like a table
+* **numpy** → generate random temperature/gas values
+* **time** → pause between updates
+* **datetime** → get current time
+* **json** → save readings to a file
+* **os** → check if file exists
+* **httpx** → low-level HTTP client for LLM
+* **ChatOpenAI** → connect to the GPT-4o model
+* **HumanMessage** → represent the prompt sent to the AI
+
+---
+
+# 🖥️ **2. Streamlit Page Setup**
+
+```python
+st.set_page_config(
+    page_title="IoT Device Dashboard",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
+```
+
+This sets the dashboard title, layout, and opens the sidebar by default.
+
+---
+
+# 🏷️ **3. Page Title & Description**
+
+```python
+st.title("AI Agent for IoT Device Anomaly Explanation")
+st.write("This dashboard simulates IoT sensor readings and explains anomalies using an LLM.")
+```
+
+This shows a heading and description at the top of the app.
+
+---
+
+# ⚙️ **4. Sidebar Configuration**
+
+```python
+TEMP_THRESHOLD = st.sidebar.slider("Temperature Threshold", 20, 80, 45)
+GAS_THRESHOLD = st.sidebar.slider("Gas Threshold", 20, 150, 70)
+UPDATE_INTERVAL = st.sidebar.slider("Update Interval (Seconds)", 1, 10, 3)
+```
+
+The user can control:
+
+* Maximum safe temperature
+* Maximum safe gas level
+* How frequently (in seconds) the dashboard updates
+
+These are simple sliders.
+
+---
+
+# 🗂️ **5. Log File Setup**
+
+```python
+LOG_FILE = "sensor_data.json"
+
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, "w") as f:
+        json.dump([], f)
+```
+
+We store sensor readings in a JSON file.
+If the file doesn't exist, we create an empty one.
+
+---
+
+# 📊 **6. Initialize Dashboard Storage**
+
+```python
+if "data" not in st.session_state:
+    st.session_state.data = pd.DataFrame(columns=["Timestamp", "Temperature", "Gas"])
+```
+
+Streamlit resets the script each time it updates, so we use session_state to keep data alive across updates.
+
+---
+
+# 📦 **7. Placeholders for Live Updates**
+
+```python
+col1, col2 = st.columns(2)
+temp_placeholder = col1.empty()
+gas_placeholder = col2.empty()
+
+chart_placeholder = st.empty()
+alert_placeholder = st.empty()
+reason_placeholder = st.empty()
+```
+
+These are “containers” where we will later insert live values:
+
+* Temperature
+* Gas readings
+* Line chart
+* Alerts
+* AI explanation
+
+---
+
+# 🤖 **8. LLM Setup**
+
+```python
+client = httpx.Client(verify=False)
+
+llm = ChatOpenAI(
+    base_url="https://genailab.tcs.in",
+    model="azure/genailab-mass-gpt-4o",
+    api_key="abcdsdfsfsdfd",   # replace this!
+    http_client=client,
+    temperature=0.2
+)
+```
+
+This connects to your GPT-4o model hosted at TCS GenAI Lab.
+
+---
+
+# 🧠 **9. Function to Ask AI for Explanation**
+
+```python
+def get_llm_explanation(temp, gas, alert_msg):
+    prompt = f"""
+You are an IoT anomaly analysis assistant.
+
+Sensor Readings:
+- Temperature: {temp:.2f} °C
+- Gas Level: {gas:.2f} PPM
+
+Alert Triggered:
+"{alert_msg}"
+
+Provide a detailed explanation:
+- Summary
+- Root Cause
+- Recommended Actions
+- Estimated Impact (Low/Medium/High)
+"""
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return response.content
+```
+
+### What does this function do?
+
+It takes:
+
+* temperature
+* gas value
+* alert message
+
+And sends them to the AI model with a structured prompt.
+
+The AI returns:
+
+* what happened
+* why it happened
+* what to do next
+* how severe it is
+
+This explanation is shown on the dashboard.
+
+---
+
+# ▶️ **10. Start Simulation Checkbox**
+
+```python
+run = st.checkbox("Start Sensor Simulation")
+```
+
+The simulator starts **only when the user checks this box**.
+
+---
+
+# 🔁 **11. Main Simulation Loop**
+
+When the user checks "Start":
+
+```python
+if run:
+    while True:
+        ...
+        time.sleep(UPDATE_INTERVAL)
+```
+
+This loop updates every `UPDATE_INTERVAL` seconds.
+
+---
+
+# 🔥 12. Generate Random Sensor Values (Simulated IoT Data)
+
+```python
+temp = np.random.normal(30, 5)
+gas = np.random.normal(50, 10)
+timestamp = datetime.now().strftime("%H:%M:%S")
+```
+
+The system pretends it is reading from real sensors using random numbers.
+
+---
+
+# 📥 **13. Store the Values**
+
+Store into Streamlit memory:
+
+```python
+new_row = pd.DataFrame([[timestamp, temp, gas]], columns=["Timestamp", "Temperature", "Gas"])
+st.session_state.data = pd.concat([st.session_state.data, new_row]).tail(50)
+```
+
+Store into the JSON log file:
+
+```python
+with open(LOG_FILE, "r+") as f:
+    data = json.load(f)
+    data.append({...})
+```
+
+---
+
+# 📈 **14. Show Live Temperature & Gas Metrics**
+
+```python
+temp_placeholder.metric(...)
+gas_placeholder.metric(...)
+```
+
+Streamlit updates these values live on screen.
+
+---
+
+# 📉 **15. Plot the Line Chart**
+
+```python
+chart_placeholder.line_chart(...)
+```
+
+Shows temperature & gas over time.
+
+---
+
+# 🚨 **16. Alert Logic (Very Important)**
+
+```python
+if temp > TEMP_THRESHOLD and gas > GAS_THRESHOLD:
+    alert_msg = "CRITICAL..."
+elif temp > TEMP_THRESHOLD:
+    alert_msg = "Temperature Alert"
+elif gas > GAS_THRESHOLD:
+    alert_msg = "Gas Alert"
+else:
+    alert_msg = "All readings Normal."
+```
+
+This decides whether to show:
+
+* ❌ critical red alert
+* ⚠️ yellow warning
+* ✅ safe green status
+
+---
+
+# 🤖 **17. LLM Explanation (This is Where AI Is Called)**
+
+```python
+if "Normal" not in alert_msg:
+    explanation = get_llm_explanation(temp, gas, alert_msg)
+    reason_placeholder.info(explanation)
+```
+
+This calls the LLM **only if an alert is detected**.
+
+So the AI doesn't get called when readings are normal.
+
+---
+
+# 💤 **18. Repeat After Interval**
+
+```python
+time.sleep(UPDATE_INTERVAL)
+```
+
+The system pauses before generating the next set of sensor readings.
+
+---
+
+# 🎯 **Summary of What This App Does**
+
+| Component             | Purpose                                         |
+| --------------------- | ----------------------------------------------- |
+| **Simulated Sensors** | Generates random temperature & gas readings     |
+| **Dashboard UI**      | Shows metrics, charts, warnings                 |
+| **Alert System**      | Checks if readings exceed thresholds            |
+| **LLM Backend**       | Explains the anomaly in human-friendly language |
+| **Data Logging**      | Saves readings to a JSON file                   |
+
+---
+
+# 🧑‍🏫 **If You're New: Why Is This Useful?**
+
+This architecture is very close to a **real industrial IoT monitoring system**, where:
+
+* devices send sensor data
+* a server monitors it
+* anomalies generate alerts
+* AI explains the cause
+* Engineers take action
+
+You can expand this to real sensors, MQTT, AWS IoT Core, etc.
+
+---
+
+# 🚀 Want the next step?
+
+I can help you add:
+
+✅ MQTT real sensor integration
+✅ History analysis dashboard
+✅ RAG (LLM + knowledge base) for device manuals
+✅ Predictive maintenance using ML models
+✅ Email/SMS alerts
+
+Just tell me!

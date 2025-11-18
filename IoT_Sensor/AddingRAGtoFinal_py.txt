@@ -1,0 +1,237 @@
+Below is a **simple, clear explanation of RAG**, followed by **how to add RAG to your IoT anomaly AI system**, with code templates you can plug in immediately.
+
+---
+
+# ⭐ **What is RAG? (Retrieval-Augmented Generation) — Explained for a Beginner**
+
+RAG = **your AI model + your private knowledge base.**
+
+Think of it like this:
+
+### 📚 Without RAG
+
+Your LLM relies only on what it already knows.
+It can hallucinate, misunderstand your system, or miss technical details.
+
+### 🔍 With RAG
+
+You connect the AI to your documents, such as:
+
+* IoT device manuals
+* Failure troubleshooting guides
+* Sensor calibration sheets
+* Maintenance logs
+* SOPs (Standard Operating Procedures)
+* Safety rules
+
+So the AI **retrieves real information** and uses it to give accurate answers.
+
+---
+
+# 🏗️ **How RAG Works (Very Simple)**
+
+RAG = **Retrieve → Augment → Generate**
+
+### 1️⃣ Retrieve
+
+Search your knowledge base (PDFs, text files, manuals, logs).
+
+### 2️⃣ Augment
+
+Add the relevant pieces into the prompt.
+
+### 3️⃣ Generate
+
+LLM uses BOTH:
+
+* retrieved text
+* sensor data
+* anomalies
+  to produce a factual explanation.
+
+---
+
+# 🎯 **How RAG Helps Your IoT Anomaly Dashboard**
+
+Without RAG:
+
+> “Temperature exceeded 80°C...”
+
+With RAG:
+
+> “Temperature exceeded 80°C.
+> According to *Device Model X Manual Section 3.1*, temperatures above 75°C may indicate thermal runaway in the motor assembly. Immediate shutdown is recommended.”
+
+RAG lets your AI quote *actual device guides*, not guess.
+
+---
+
+# 🛠️ **Integrating RAG into Your System**
+
+Below is a **full RAG pipeline** using:
+
+* ChromaDB (free local vector DB)
+* LangChain
+* Your existing GPT-4o setup
+
+---
+
+# 📂 Step 1 — Put Your Documents in a Folder
+
+Create a folder:
+
+```
+knowledge_base/
+   motor_manual.pdf
+   safety_guidelines.txt
+   calibration_sheet.pdf
+   troubleshooting_guide.pdf
+```
+
+---
+
+# 🧩 Step 2 — Build Vector Database (One-Time Setup)
+
+Create a script: **build_vector_store.py**
+
+```python
+from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+
+# 1. Load documents from local folder
+loader = DirectoryLoader(
+    "./knowledge_base",
+    glob="**/*.pdf",
+    loader_cls=PyPDFLoader
+)
+
+text_loader = DirectoryLoader(
+    "./knowledge_base",
+    glob="**/*.txt",
+    loader_cls=TextLoader
+)
+
+documents = loader.load() + text_loader.load()
+
+# 2. Split into small chunks
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+chunks = splitter.split_documents(documents)
+
+# 3. Create embeddings (vector representation)
+embeddings = OpenAIEmbeddings(base_url="https://genailab.tcs.in", api_key="abcd1234")
+
+# 4. Store in Chroma DB
+db = Chroma.from_documents(chunks, embedding=embeddings, persist_directory="chromadb_store")
+db.persist()
+
+print("Vector store created successfully!")
+```
+
+Run this once:
+
+```
+python build_vector_store.py
+```
+
+---
+
+# 🕵️ Step 3 — Add RAG Search to Your Streamlit App
+
+Add this near the top of your code:
+
+```python
+from langchain_community.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
+```
+
+Add below (load the vector DB):
+
+```python
+embeddings = OpenAIEmbeddings(
+    base_url="https://genailab.tcs.in",
+    api_key="abcd1234"
+)
+
+vector_db = Chroma(
+    persist_directory="chromadb_store",
+    embedding_function=embeddings
+)
+```
+
+---
+
+# 🤖 Step 4 — Modify Your AI Explanation Function to Use RAG
+
+Replace your `get_llm_explanation()` function with this RAG-enabled one:
+
+```python
+def get_llm_explanation(temp, gas, alert_msg):
+    # Retrieve most relevant docs
+    query = f"IoT sensor anomaly: temp={temp}, gas={gas}, alert={alert_msg}"
+    docs = vector_db.similarity_search(query, k=3)
+
+    retrieved_text = "\n\n".join([d.page_content for d in docs])
+
+    prompt = f"""
+You are an IoT anomaly analysis assistant.
+
+Relevant Knowledge Base:
+{retrieved_text}
+
+Sensor Readings:
+- Temperature: {temp:.2f} °C
+- Gas Level: {gas:.2f} PPM
+
+Alert Triggered:
+"{alert_msg}"
+
+Using the above knowledge base, provide a detailed explanation:
+- Summary
+- Root Cause based on manual/SOP
+- Recommended Actions tied to retrieved documents
+- Estimated Impact (Low/Medium/High)
+"""
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return response.content
+```
+
+### ✔ Now your AI answers are backed by real knowledge
+
+It can quote manuals, procedures, and troubleshooting guides.
+
+---
+
+# 🚀 **What RAG Adds to Your IoT Dashboard**
+
+| Without RAG                | With RAG                              |
+| -------------------------- | ------------------------------------- |
+| AI guesses possible causes | AI uses real documentation            |
+| Generic suggestions        | Manufacturer-specific recommendations |
+| Not always reliable        | High accuracy                         |
+| No citations               | Cites manuals, SOPs, logs             |
+| No training required       | Uses your documents immediately       |
+
+---
+
+# 🧠 Example RAG Response
+
+> According to *Device Calibration Manual v2.3*, section 5.1, gas levels above 70 PPM indicate sensor drift which requires recalibration.
+> Temperature exceeding 80°C in combination can cause internal gasket failure.
+
+---
+
+# 🎁 Want Me To Add More?
+
+I can add:
+
+✅ RAG Citations (show which PDF page came from)
+✅ RAG UI in Streamlit (expandable panel with sources)
+✅ Upload new documents directly from the dashboard
+✅ Real IoT MQTT integration (AWS IoT, HiveMQ, Azure IoT Hub)
+✅ Auto-update vector DB when new docs are added
+✅ Advanced RAG with HyDE, ColBERT, RAG-fusion
+
+Just tell me!
